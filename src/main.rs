@@ -1,12 +1,12 @@
 mod ais_reformatter;
 mod listener;
-use std::{error::Error, net::SocketAddr};
+use std::{error::Error, net::SocketAddr, process::ExitCode};
 
 use clap::Parser;
 use reqwest::Url;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::upload::run_upload;
@@ -50,7 +50,7 @@ struct ListenPorts {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<ExitCode, Box<dyn Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .with(tracing_subscriber::EnvFilter::from_default_env())
@@ -61,17 +61,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let shutdown_token = register_ctrl_c_listener();
     let msg_rx = intitialize_listeners(&args, &shutdown_token).await?;
 
-    let upload_handle = tokio::task::spawn(run_upload(
-        shutdown_token,
-        msg_rx,
-        args.upload_endpoint,
-        args.auth_token.into(),
-        args.write_to_stdout,
-    ));
+    let upload_handle = tokio::task::spawn(async move {
+        let res = run_upload(
+            shutdown_token,
+            msg_rx,
+            args.upload_endpoint,
+            args.auth_token.into(),
+            args.write_to_stdout,
+        )
+        .await;
+        info!("Upload task done");
+        res
+    });
 
-    upload_handle.await.unwrap().expect("upload failed");
+    if let Err(e) = upload_handle.await.unwrap() {
+        error!("Upload failed with result: {e:?}");
+        return Ok(ExitCode::FAILURE);
+    }
 
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn intitialize_listeners(

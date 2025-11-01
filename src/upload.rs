@@ -4,7 +4,7 @@ use reqwest::{Body, Client, Method, Request, RequestBuilder, Url};
 use tokio::{sync::mpsc, time::Instant};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub async fn run_upload(
     shutdown_token: CancellationToken,
@@ -16,7 +16,17 @@ pub async fn run_upload(
     let mut recovered_msg = None;
     let client = Client::new();
 
+    let mut final_attempt_at_shutdown_done = false;
+
     loop {
+        if final_attempt_at_shutdown_done {
+            info!("Now respecting shutdown request over upload retry");
+            return Ok(());
+        } else if shutdown_token.is_cancelled() {
+            info!("shutdown source triggered, making a final upload attempt");
+            final_attempt_at_shutdown_done = true;
+        }
+
         let (upload_tx, upload_rx) = tokio::sync::mpsc::channel(1);
         let mut upload_task = pin!(tokio::task::spawn(run_single_request(
             client.clone(),
@@ -44,7 +54,14 @@ pub async fn run_upload(
                         }
 
                         if let Err(er) = upload_tx.send(Ok(msg)).await {
+                            info!("channel broken.");
                             recovered_msg = Some(er.0);
+                            // the channel was broken.
+                            if let Err(e) = upload_task.await.box_err() {
+                                error!("error uploading: {e}");
+                                wait_for_next_retry(upload_start_instant, &shutdown_token).await;
+                            }
+
                             break;
                         }
                     }
@@ -57,27 +74,32 @@ pub async fn run_upload(
                 _ = &mut recycle_timeout => {
                     info!("recycling connection");
                     drop(upload_tx);
-                    upload_task.await.box_err()??;
+                    if let Err(e) = upload_task.await.box_err()? {
+                        error!("error uploading: {e}");
+                        wait_for_next_retry(upload_start_instant, &shutdown_token).await;
+                    }
                     break;
                 }
                 upload_result = &mut upload_task => {
-                    if let Err(e) = upload_result {
+                    debug!("{upload_result:?}");
+                    if let Err(e) = upload_result.box_err()? {
                         error!("error uploading: {e}");
-                        let wait_deadline = upload_start_instant + Duration::from_secs(15);
-                        if wait_deadline > Instant::now() {
-                            info!("waiting until {wait_deadline:?} before retrying");
-                            tokio::select! {
-                                _ = tokio::time::sleep_until(wait_deadline) => {},
-                                _ = shutdown_token.cancelled() => {
-                                    return Ok(());
-                                }
-                            }
-                        }
+                        wait_for_next_retry(upload_start_instant, &shutdown_token).await;
                     }
                     break;
                 }
             }
         }
+    }
+}
+
+async fn wait_for_next_retry(op_start_time: Instant, cancel_token: &CancellationToken) {
+    let wait_deadline = op_start_time + Duration::from_secs(15);
+    if wait_deadline > Instant::now() {
+        info!("waiting until {wait_deadline:?} before retrying");
+        cancel_token
+            .run_until_cancelled(tokio::time::sleep_until(wait_deadline))
+            .await;
     }
 }
 
