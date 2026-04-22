@@ -7,7 +7,8 @@ pub async fn run_udp_listener(
     msg_tx: Sender<Vec<u8>>,
     add_time_prefix: bool,
 ) -> Result<(), std::io::Error> {
-    let mut buf = vec![0u8; 4096].into_boxed_slice();
+    let mut buf = vec![0u8; 65_535].into_boxed_slice();
+
     loop {
         let num_bytes = socket.recv(&mut buf).await?;
         let chunk = process_complete_chunk(&buf[..num_bytes], add_time_prefix);

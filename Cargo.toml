@@ -5,10 +5,10 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive", "env"] }
-reqwest = { version = "0.12.23", features = ["http2", "stream", "default-tls"], default-features = false }
-tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread", "signal", "time", "parking_lot" , "sync"] }
-tokio-stream = "0.1.17"
-tokio-util = { version = "0.7.16", features = ["io"] }
+reqwest = { version = "0.13", features = ["http2", "stream", "default-tls"], default-features = false }
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread", "signal", "time", "parking_lot" , "sync"] }
+tokio-stream = "0.1.18"
+tokio-util = { version = "0.7.18", features = ["io"] }
 tracing = "0.1"
 tracing-subscriber = {version = "0.3.19", features= ["env-filter"]}
 
