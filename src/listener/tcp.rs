@@ -40,6 +40,7 @@ async fn process_tcp_stream(
 ) -> Result<(), Box<dyn Error>> {
     let mut buf = vec![0u8; 4096].into_boxed_slice();
     let mut previously_filled_bytes = 0;
+    let mut line_buf = Vec::new();
 
     loop {
         let free_space = &mut buf[previously_filled_bytes..];
@@ -56,11 +57,13 @@ async fn process_tcp_stream(
         let valid_part = &buf[..(previously_filled_bytes + bytes_read)];
         if let Some(last_newline_idx) = valid_part.iter().rposition(|e| *e == b'\n') {
             let completed_part = &valid_part[..last_newline_idx];
-            let chunk = process_complete_chunk(completed_part, add_time_prefix);
-            msg_tx
-                .send(chunk)
-                .await
-                .expect("channel closed unexpectedly");
+            process_complete_chunk(completed_part, add_time_prefix, &mut line_buf);
+            for line in line_buf.drain(..) {
+                msg_tx
+                    .send(line)
+                    .await
+                    .expect("channel closed unexpectedly");
+            }
 
             let incomplete_part = (completed_part.len() + 1)..valid_part.len();
             previously_filled_bytes = incomplete_part.len();

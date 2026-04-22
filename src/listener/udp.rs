@@ -9,12 +9,16 @@ pub async fn run_udp_listener(
 ) -> Result<(), std::io::Error> {
     let mut buf = vec![0u8; 65_535].into_boxed_slice();
 
+    let mut line_buf = Vec::new();
+
     loop {
         let num_bytes = socket.recv(&mut buf).await?;
-        let chunk = process_complete_chunk(&buf[..num_bytes], add_time_prefix);
-        msg_tx
-            .send(chunk)
-            .await
-            .expect("channel closed unexpectedly");
+        process_complete_chunk(&buf[..num_bytes], add_time_prefix, &mut line_buf);
+        for line in line_buf.drain(..) {
+            msg_tx
+                .send(line)
+                .await
+                .expect("channel closed unexpectedly");
+        }
     }
 }

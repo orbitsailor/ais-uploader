@@ -46,17 +46,13 @@
               };
               # https://devenv.sh/reference/options/
               packages = [pkgs.mold pkgs.cargo-expand pkgs.cargo-nextest pkgs.openssl];
-
-              # enterShell = ''
-              #   hello
-              # '';
             }
           ];
         };
       });
 
     package-defs = {
-      ais-uploader = ./nix/ais-uploader.nix;
+      ais-uploader = ../nix/ais-uploader.nix;
     };
   };
 }

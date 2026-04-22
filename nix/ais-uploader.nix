@@ -13,15 +13,9 @@ rustPlatform.buildRustPackage (
     nativeBuildInputs = [pkg-config];
     buildInputs = [openssl];
 
-    src = fetchFromGitHub {
-      owner = "orbitsailor";
-      repo = "ais-uploader";
-      tag = finalAttrs.version;
-      hash = "sha256-LGfqzldmBzJniSb6paDqoLwFTuO0jQvgc1en12DNBKg=";
-      # hash = lib.fakeHash;
-    };
+    src = ./..;
 
-    cargoHash = "sha256-LLy0oiKJ5RLe2LPDdfh+90Sl4U89tudkzj4JQNkdJ7g=";
+    cargoHash = "sha256-8JZk4j5yvzmBQK/02KbcqNY/lTSr+L6jefzUGCTcW1M=";
     # cargoHash = lib.fakeHash;
     strip = true;
 
