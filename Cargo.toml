@@ -3,6 +3,11 @@ name = "ais_forwarder"
 version = "0.1.2"
 edition = "2024"
 
+[features]
+default = ["gpsd_client"]
+
+gpsd_client = ["serde_json", "serde", "time"]
+
 [dependencies]
 clap = { version = "4.5.48", features = ["derive", "env"] }
 reqwest = { version = "0.13", features = ["http2", "stream", "default-tls"], default-features = false }
@@ -11,4 +16,9 @@ tokio-stream = "0.1.18"
 tokio-util = { version = "0.7.18", features = ["io"] }
 tracing = "0.1"
 tracing-subscriber = {version = "0.3.19", features= ["env-filter"]}
+serde_json = {version = "1", optional = true }
+serde = {version = "1", features = ["derive"], optional = true}
+time = {version = "0.3", features = ["serde"], optional = true}
+thiserror = {version = "2"}
+arc-swap = {version = ">=1.9, <2" }
 

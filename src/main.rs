@@ -1,7 +1,9 @@
 mod ais_reformatter;
 mod listener;
-use std::{error::Error, net::SocketAddr, process::ExitCode};
+use std::{error::Error, net::SocketAddr, process::ExitCode, sync::Arc};
 
+use ais_reformatter::Formatter;
+use arc_swap::ArcSwap;
 use clap::Parser;
 use reqwest::Url;
 use tokio::sync::mpsc;
@@ -11,6 +13,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::upload::run_upload;
 
+mod gpsd_client;
 mod upload;
 
 /// This program listens on a tcp/udp port and forwards received AIS data to the configured
@@ -34,6 +37,11 @@ struct Args {
     /// prefix received lines with the current unix timestamp
     #[arg(short = 'p', long)]
     prefix_current_time: bool,
+
+    /// Which port should we connect to to receive gps information?
+    #[cfg(feature = "gpsd_client")]
+    #[arg(short = 'g', long)]
+    gpsd_addr: Option<SocketAddr>,
 }
 
 #[derive(Parser, Debug)]
@@ -87,17 +95,29 @@ async fn intitialize_listeners(
     shutdown_token: &CancellationToken,
 ) -> Result<mpsc::Receiver<Vec<u8>>, Box<dyn Error>> {
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel(4096);
-    let prefix_time = args.prefix_current_time;
+
+    let gps_opt = Arc::new(ArcSwap::new(Arc::new(None)));
+    let formatter = Formatter::new(gps_opt.clone(), args.prefix_current_time);
+
+    if let Some(addr) = args.gpsd_addr {
+        let token = shutdown_token.clone();
+        tokio::task::spawn(async move {
+            token
+                .run_until_cancelled(async move { gpsd_client::run_client(&addr, gps_opt).await })
+                .await
+        });
+    }
 
     if let Some(addr) = args.ports.udp_listener {
         let socket = tokio::net::UdpSocket::bind(addr).await?;
         info!("listening on UDP addr {addr}");
         let msg_tx = msg_tx.clone();
         let shutdown_token = shutdown_token.clone();
+        let formatter = formatter.clone();
 
         tokio::task::spawn(async move {
             let res = shutdown_token
-                .run_until_cancelled(listener::run_udp_listener(socket, msg_tx, prefix_time))
+                .run_until_cancelled(listener::run_udp_listener(socket, msg_tx, formatter))
                 .await;
             info!("Udp listener exited with result: {res:?}");
         });
@@ -109,7 +129,7 @@ async fn intitialize_listeners(
 
         let shutdown_token = shutdown_token.clone();
         tokio::task::spawn(async move {
-            let res = listener::run_tcp_listener(socket, msg_tx, shutdown_token, prefix_time).await;
+            let res = listener::run_tcp_listener(socket, msg_tx, shutdown_token, formatter).await;
             info!("tcp listener exited with result {res:?}");
         });
     }

@@ -4,13 +4,13 @@ use tokio::{io::AsyncReadExt, net::TcpStream, sync::mpsc::Sender};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-use crate::ais_reformatter::process_complete_chunk;
+use crate::ais_reformatter::Formatter;
 
 pub async fn run_tcp_listener(
     socket: tokio::net::TcpListener,
     msg_tx: Sender<Vec<u8>>,
     shutdown_token: CancellationToken,
-    add_time_prefix: bool,
+    formatter: Formatter,
 ) -> Result<(), Box<dyn Error>> {
     loop {
         tokio::select! {
@@ -22,8 +22,9 @@ pub async fn run_tcp_listener(
                 info!("accepted TCP connection for peer {peer_addr}");
                 let shutdown_token = shutdown_token.clone();
                 let msg_tx = msg_tx.clone();
+                let formatter = formatter.clone();
                 tokio::task::spawn(async move {
-                    let res = shutdown_token.run_until_cancelled(process_tcp_stream(conn, msg_tx, add_time_prefix)).await;
+                    let res = shutdown_token.run_until_cancelled(process_tcp_stream(conn, msg_tx, formatter)).await;
                     info!("connection to peer {peer_addr} terminated with result {res:?}");
                 });
             }
@@ -36,7 +37,7 @@ pub async fn run_tcp_listener(
 async fn process_tcp_stream(
     mut conn: TcpStream,
     msg_tx: Sender<Vec<u8>>,
-    add_time_prefix: bool,
+    formatter: Formatter,
 ) -> Result<(), Box<dyn Error>> {
     let mut buf = vec![0u8; 4096].into_boxed_slice();
     let mut previously_filled_bytes = 0;
@@ -57,7 +58,7 @@ async fn process_tcp_stream(
         let valid_part = &buf[..(previously_filled_bytes + bytes_read)];
         if let Some(last_newline_idx) = valid_part.iter().rposition(|e| *e == b'\n') {
             let completed_part = &valid_part[..last_newline_idx];
-            process_complete_chunk(completed_part, add_time_prefix, &mut line_buf);
+            formatter.process_complete_chunk(completed_part, &mut line_buf);
             for line in line_buf.drain(..) {
                 msg_tx
                     .send(line)
