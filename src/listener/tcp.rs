@@ -37,7 +37,7 @@ pub async fn run_tcp_listener(
 async fn process_tcp_stream(
     mut conn: TcpStream,
     msg_tx: Sender<Vec<u8>>,
-    formatter: Formatter,
+    mut formatter: Formatter,
 ) -> Result<(), Box<dyn Error>> {
     let mut buf = vec![0u8; 4096].into_boxed_slice();
     let mut previously_filled_bytes = 0;

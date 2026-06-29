@@ -5,7 +5,7 @@ use crate::ais_reformatter::Formatter;
 pub async fn run_udp_listener(
     socket: tokio::net::UdpSocket,
     msg_tx: Sender<Vec<u8>>,
-    formatter: Formatter,
+    mut formatter: Formatter,
 ) -> Result<(), std::io::Error> {
     let mut buf = vec![0u8; 65_535].into_boxed_slice();
 

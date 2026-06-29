@@ -88,10 +88,10 @@ mod driver {
     }
 
     fn format_gps(msg: GpsMessage) -> String {
-        let mut res = format!("la:{},lo:{}", msg.lat, msg.lon);
+        let mut res = format!("l:{};{}", msg.lon, msg.lat);
         if let Some(err) = msg.error_estimate {
             res.write_fmt(format_args!(
-                ",e:{}",
+                ";err:{}",
                 f32::max(err.longitude_estimate_meters, err.latitude_estimate_meters)
             ))
             .expect("writing to string cannot fail");
